@@ -190,3 +190,4 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.scatter(gan_samples[:,0], gan_samples[:,1], s=3)
     plt.title("GAN")
     plt.show()
+
