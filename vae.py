@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.stats import gaussian_kde
+import datetime  
 
 # ---------- Residual Block ----------
 class ResBlock(nn.Module):
@@ -66,73 +67,8 @@ def vae_loss(x, x_recon, mu, logvar, beta=0.2):
     return recon + beta * kl
 
 # ---------- Training Function ----------
-def train_vae_(loader, X, epochs=1500, device="cpu"):
-    print("\nTraining VAE...")
-
-    vae = VAE(d=2, h=128, z=24, n_res=3).to(device)
-    opt = optim.Adam(vae.parameters(), lr=1e-3)
-
-    # Lists for logging
-    epoch_losses = []
-    recon_losses = []
-    kl_losses = []
-
-    for epoch in tqdm(range(epochs), desc="Epochs"):
-        running_loss = 0
-        running_recon = 0
-        running_kl = 0
-        count = 0
-
-        for (x,) in loader:
-            x = x.to(device).float()
-            opt.zero_grad()
-
-            x_recon, mu, logvar = vae(x)
-
-            # compute losses
-            recon = nn.MSELoss(reduction="mean")(x_recon, x)
-            kl = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-            loss = recon + 0.2 * kl
-
-            loss.backward()
-            opt.step()
-
-            # accumulate
-            batch_size = x.size(0)
-            running_loss += loss.item() * batch_size
-            running_recon += recon.item() * batch_size
-            running_kl += kl.item() * batch_size
-            count += batch_size
-
-        epoch_losses.append(running_loss / count)
-        recon_losses.append(running_recon / count)
-        kl_losses.append(running_kl / count)
-
-    # --- Plot losses ---
-    plt.figure(figsize=(7,5))
-    plt.plot(epoch_losses, label="Total Loss")
-    plt.plot(recon_losses, label="Reconstruction Loss")
-    plt.plot(kl_losses, label="KL Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("VAE Training Losses")
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.show()
-
-    # ----- Sampling -----
-    vae.eval()
-    vae_samples = vae.sample(n=2000, device=device)
-
-    plt.figure(figsize=(5,5))
-    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
-    plt.scatter(vae_samples[:,0], vae_samples[:,1], s=3)
-    plt.title("VAE Samples vs Data")
-    plt.show()
-
 def train_vae(loader, X, epochs=1500, device="cpu"):
     print("\nTraining VAE...")
-
     vae = VAE(d=2, h=128, z=24, n_res=3).to(device)
     opt = optim.Adam(vae.parameters(), lr=1e-3)
 
@@ -150,7 +86,6 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
         for (x,) in loader:
             x = x.to(device).float()
             opt.zero_grad()
-
             x_recon, mu, logvar = vae(x)
 
             # compute losses
@@ -172,7 +107,9 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
         recon_losses.append(running_recon / count)
         kl_losses.append(running_kl / count)
 
-    # --- Plot losses ---
+    # -----------------------------
+    # Plot Loss Curves
+    # -----------------------------
     plt.figure(figsize=(7,5))
     plt.plot(epoch_losses, label="Total Loss")
     plt.plot(recon_losses, label="Reconstruction Loss")
@@ -182,6 +119,8 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     plt.title("VAE Training Losses")
     plt.legend()
     plt.grid(alpha=0.3)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    plt.savefig(f"vae_loss_curves_{timestamp}.png")
     plt.show()
 
     # ----- Sampling -----
@@ -192,6 +131,7 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
     plt.scatter(vae_samples[:,0], vae_samples[:,1], s=3)
     plt.title("VAE Samples vs Data")
+    plt.savefig(f"vae_scatter_samples_{timestamp}.png")
     plt.show()
 
     # If vae_samples is already a numpy array:
@@ -206,7 +146,6 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     # Create grid for density evaluation
     x_min, x_max = X[:,0].min(), X[:,0].max()
     y_min, y_max = X[:,1].min(), X[:,1].max()
-
     xx, yy = np.mgrid[x_min:x_max:200j, y_min:y_max:200j]
     grid = np.vstack([xx.ravel(), yy.ravel()])
     zz = kde(grid).reshape(xx.shape)
@@ -216,11 +155,10 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     plt.scatter(vae_samples_np[0], vae_samples_np[1], s=5, alpha=0.3, color="red")
     plt.title("KDE of VAE-Generated Samples")
     plt.colorbar(label="Density")
+    plt.savefig(f"vae_kde_density_{timestamp}.png")
     plt.show()
 
     # Fit KDE on model samples (already computed above as "kde")
     logpdf_vals = kde.logpdf(X.T)
-
     kde_ll = float(logpdf_vals.mean())
-
     print(f"\nKDE Estimated Log-Likelihood (VAE): {kde_ll:.4f}\n")

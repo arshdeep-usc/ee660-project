@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.stats import gaussian_kde
+import datetime  
 
 # ---------- Residual Block ----------
 class ResBlock(nn.Module):
@@ -131,6 +132,8 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.title("GAN Training Losses")
     plt.grid(alpha=0.3)
     plt.legend()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    plt.savefig(f"gan_loss_curves_{timestamp}.png")
     plt.show()
 
     # ----- Sampling -----
@@ -141,9 +144,10 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
     plt.scatter(gan_samples[:,0], gan_samples[:,1], s=3)
     plt.title("GAN")
+    plt.savefig(f"gan_scatter_samples_{timestamp}.png")
     plt.show()
 
-    # If vae_samples is already a numpy array:
+    # If gan_samples is already a numpy array:
     if isinstance(gan_samples, np.ndarray):
         gan_samples_np = gan_samples.T
     else:
@@ -165,6 +169,7 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.scatter(gan_samples_np[0], gan_samples_np[1], s=5, alpha=0.3, color="red")
     plt.title("KDE of GAN-Generated Samples")
     plt.colorbar(label="Density")
+    plt.savefig(f"gan_kde_density_{timestamp}.png")
     plt.show()
 
     # Fit KDE on model samples (already computed above as "kde")
