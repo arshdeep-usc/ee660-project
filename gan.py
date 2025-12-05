@@ -5,6 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from scipy.stats import gaussian_kde
 
 # ---------- Residual Block ----------
 class ResBlock(nn.Module):
@@ -64,54 +65,7 @@ def sample_gan(G, n=2000, device="cpu"):
     z = torch.randn(n, G.z_dim, device=device)   
     return G(z).cpu().numpy()
 
-def train_gan_(loader, X, epochs=1500, device="cpu"):
-    print("\nTraining GAN...")
-    
-    # Initialize models
-    G = Generator(z=2, h=32, d=2, n_res=4).to(device)
-    D = Discriminator(d=2, h=64, n_res=3).to(device)
-    
-    optG = optim.Adam(G.parameters(), lr=1e-3, betas=(0.5, 0.9))
-    optD = optim.Adam(D.parameters(), lr=1e-3, betas=(0.5, 0.9))
-    
-    bce = nn.BCELoss()
-    
-    for _ in tqdm(range(epochs), desc="Epochs"):
-        for (x,) in loader:
-            x = x.to(device).float()
-            bs = x.size(0)
-    
-            # ---------------------
-            # Train Discriminator
-            # ---------------------
-            z = torch.randn(bs, 2, device=device)
-            fake = G(z)
-    
-            optD.zero_grad()
-            loss_real = bce(D(x), torch.ones(bs, 1, device=device))
-            loss_fake = bce(D(fake.detach()), torch.zeros(bs, 1, device=device))
-            loss_D = loss_real + loss_fake
-            loss_D.backward()
-            optD.step()
-    
-            # ---------------------
-            # Train Generator
-            # ---------------------
-            optG.zero_grad()
-            loss_G = bce(D(fake), torch.ones(bs, 1, device=device))
-            loss_G.backward()
-            optG.step()
-    
-    # Sample from trained GAN
-    G.eval()
-    gan_samples = sample_gan(G, n=2000, device=device)
-    
-    plt.figure(figsize=(5,5))
-    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
-    plt.scatter(gan_samples[:,0], gan_samples[:,1], s=3)
-    plt.title(f"GAN")
-    plt.show()
-
+# ---------- Training function ----------
 def train_gan(loader, X, epochs=1500, device="cpu"):
     print("\nTraining GAN...")
     
@@ -179,9 +133,7 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.legend()
     plt.show()
 
-    # -----------------------------
-    # Plot Generated Samples
-    # -----------------------------
+    # ----- Sampling -----
     G.eval()
     gan_samples = sample_gan(G, n=2000, device=device)
 
@@ -191,3 +143,33 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     plt.title("GAN")
     plt.show()
 
+    # If vae_samples is already a numpy array:
+    if isinstance(gan_samples, np.ndarray):
+        gan_samples_np = gan_samples.T
+    else:
+        gan_samples_np = gan_samples.cpu().numpy().T
+
+    # ------- KDE on GAN samples -------
+    kde = gaussian_kde(gan_samples_np)
+
+    # Create grid for density evaluation
+    x_min, x_max = X[:,0].min(), X[:,0].max()
+    y_min, y_max = X[:,1].min(), X[:,1].max()
+
+    xx, yy = np.mgrid[x_min:x_max:200j, y_min:y_max:200j]
+    grid = np.vstack([xx.ravel(), yy.ravel()])
+    zz = kde(grid).reshape(xx.shape)
+
+    plt.figure(figsize=(6,5))
+    plt.contourf(xx, yy, zz, levels=50, cmap="viridis")
+    plt.scatter(gan_samples_np[0], gan_samples_np[1], s=5, alpha=0.3, color="red")
+    plt.title("KDE of GAN-Generated Samples")
+    plt.colorbar(label="Density")
+    plt.show()
+
+    # Fit KDE on model samples (already computed above as "kde")
+    logpdf_vals = kde.logpdf(X.T)
+
+    kde_ll = float(logpdf_vals.mean())
+
+    print(f"\nKDE Estimated Log-Likelihood (GAN): {kde_ll:.4f}\n")
