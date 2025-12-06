@@ -67,7 +67,7 @@ def sample_gan(G, n=2000, device="cpu"):
     return G(z).cpu().numpy()
 
 # ---------- Training function ----------
-def train_gan(loader, X, epochs=1500, device="cpu"):
+def train_gan(loader, X, hold_out, hold_out_data, epochs=1500, device="cpu"):
     print("\nTraining GAN...")
     
     # Initialize models
@@ -82,11 +82,48 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     # --- Loss storage ---
     G_losses = []
     D_losses = []
+    ho_G_losses = []
+    ho_D_losses = []
 
     for epoch in tqdm(range(epochs), desc="Epochs"):
         running_G = 0.0
         running_D = 0.0
         total_samples = 0
+
+        ho_running_G = 0.0
+        ho_running_D = 0.0
+        ho_total_samples = 0
+
+        G.eval()
+        D.eval()
+        for (x,) in hold_out:
+            x = x.to(device).float()
+            bs = x.size(0)
+            ho_total_samples += bs
+
+            # -------------------------
+            # Train Discriminator
+            # -------------------------
+            z = torch.randn(bs, 2, device=device)
+            fake = G(z)
+
+            loss_real = bce(D(x), torch.ones(bs, 1, device=device))
+            loss_fake = bce(D(fake.detach()), torch.zeros(bs, 1, device=device))
+            loss_D = loss_real + loss_fake
+
+            # -------------------------
+            # Train Generator
+            # -------------------------
+            loss_G = bce(D(fake), torch.ones(bs, 1, device=device))
+
+            ho_running_D += loss_D.item() * bs
+            ho_running_G += loss_G.item() * bs
+
+        # Epoch averages
+        ho_D_losses.append(ho_running_D / ho_total_samples)
+        ho_G_losses.append(ho_running_G / ho_total_samples)
+        G.train()
+        D.train()
 
         for (x,) in loader:
             x = x.to(device).float()
@@ -124,9 +161,15 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     # -----------------------------
     # Plot Loss Curves
     # -----------------------------
+    print(f"Avg Discriminator Training Loss = {np.mean(D_losses)}")
+    print(f"Avg Generator Training Loss = {np.mean(G_losses)}")
+    print(f"Avg Discriminator Hold Out Loss = {np.mean(ho_D_losses)}")
+    print(f"Avg Generator Hold Out Loss = {np.mean(ho_G_losses)}")
     plt.figure(figsize=(7,5))
     plt.plot(D_losses, label="Discriminator Loss")
     plt.plot(G_losses, label="Generator Loss")
+    plt.plot(ho_D_losses, label="Hold Out Discriminator Loss")
+    plt.plot(ho_G_losses, label="Hold Out Generator Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("GAN Training Losses")
@@ -141,8 +184,10 @@ def train_gan(loader, X, epochs=1500, device="cpu"):
     gan_samples = sample_gan(G, n=2000, device=device)
 
     plt.figure(figsize=(5,5))
-    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
-    plt.scatter(gan_samples[:,0], gan_samples[:,1], s=3)
+    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2, label="Training")
+    plt.scatter(gan_samples[:,0], gan_samples[:,1], s=3, label="Samples")
+    plt.scatter(hold_out_data[:,0], hold_out_data[:,1], s=2, alpha=0.5, color='green', label="Hold Out")
+    plt.legend()
     plt.title("GAN")
     plt.savefig(f"gan_scatter_samples_{timestamp}.png")
     plt.show()

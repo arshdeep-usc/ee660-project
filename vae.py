@@ -67,7 +67,7 @@ def vae_loss(x, x_recon, mu, logvar, beta=0.2):
     return recon + beta * kl
 
 # ---------- Training Function ----------
-def train_vae(loader, X, epochs=1500, device="cpu"):
+def train_vae(loader, X, hold_out, hold_out_data, epochs=1500, device="cpu"):
     print("\nTraining VAE...")
     vae = VAE(d=2, h=128, z=24, n_res=3).to(device)
     opt = optim.Adam(vae.parameters(), lr=1e-3)
@@ -76,12 +76,34 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     epoch_losses = []
     recon_losses = []
     kl_losses = []
+    hold_out_losses = []
 
     for epoch in tqdm(range(epochs), desc="Epochs"):
         running_loss = 0
         running_recon = 0
         running_kl = 0
         count = 0
+
+        ho_running_loss = 0
+        ho_count = 0
+
+        vae.eval()
+        for (x,) in hold_out:
+            x = x.to(device).float()
+            x_recon, mu, logvar = vae(x)
+
+            # compute losses
+            recon = nn.MSELoss(reduction="mean")(x_recon, x)
+            kl = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+            loss = recon + 0.2 * kl
+
+            # accumulate
+            batch_size = x.size(0)
+            ho_running_loss += loss.item() * batch_size
+            ho_count += batch_size
+            
+        hold_out_losses.append(ho_running_loss / ho_count)
+        vae.train()
 
         for (x,) in loader:
             x = x.to(device).float()
@@ -102,18 +124,24 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
             running_recon += recon.item() * batch_size
             running_kl += kl.item() * batch_size
             count += batch_size
-
+                
+        
         epoch_losses.append(running_loss / count)
         recon_losses.append(running_recon / count)
         kl_losses.append(running_kl / count)
 
+
+
     # -----------------------------
     # Plot Loss Curves
     # -----------------------------
+    print(f"Avg Trainig Loss = {np.mean(epoch_losses)}")
+    print(f"Avg Hold Out Loss = {np.mean(hold_out_losses)}")
     plt.figure(figsize=(7,5))
     plt.plot(epoch_losses, label="Total Loss")
     plt.plot(recon_losses, label="Reconstruction Loss")
     plt.plot(kl_losses, label="KL Loss")
+    plt.plot(hold_out_losses, label="Hold Out Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("VAE Training Losses")
@@ -128,8 +156,10 @@ def train_vae(loader, X, epochs=1500, device="cpu"):
     vae_samples = vae.sample(n=2000, device=device)
 
     plt.figure(figsize=(5,5))
-    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2)
-    plt.scatter(vae_samples[:,0], vae_samples[:,1], s=3)
+    plt.scatter(X[:,0], X[:,1], s=2, alpha=0.2, label="Training")
+    plt.scatter(vae_samples[:,0], vae_samples[:,1], s=3, label="Samples")
+    plt.scatter(hold_out_data[:,0], hold_out_data[:,1], s=2, alpha=0.5, color='green', label="Hold Out")
+    plt.legend()
     plt.title("VAE Samples vs Data")
     plt.savefig(f"vae_scatter_samples_{timestamp}.png")
     plt.show()
