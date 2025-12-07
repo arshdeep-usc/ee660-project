@@ -1,0 +1,286 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+
+\title{Generative Modeling on 2D Synthetic Datasets}
+\author{Arshdeep Dhillon}
+\date{6 Dec 2025}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+A comparative analysis was conducted between a Variational Autoencoder (VAE) and a Generative Adversarial Network (GAN) on 2-D synthetic datasets commonly used to evaluate performance on structured, multimodal, and geometrically complex distributions. Residual blocks were incorporated into both models to increase representational capacity. The architectures employed in the experiments are shown in Figure~\ref{fig:model_architectures}.
+
+The models were evaluated on four datasets—Pinwheel, Spiral, Checkerboard, and Gaussian Mixtures—using both qualitative and quantitative metrics. Dataset-specific training parameters are presented in the following sections, and results include loss curves, scatter plots of generated vs.\ real samples, and KDE-based density visualizations for assessing distributional fidelity.
+
+All code, configuration files, and generated outputs (plots, density maps, logs) are available in the project repository:
+\texttt{https://github.com/arshdeep-usc/ee660-project}
+
+Qualitatively, VAE samples tend to form smooth, continuous approximations of the underlying manifolds, while GAN samples produce sharper, more detailed structures but occasionally exhibit mode imbalance (notably in the Gaussian Mixtures dataset). Quantitatively, KDE log-likelihood scores (Table~\ref{tab:kde_results}) indicate that VAEs perform better on smoother datasets (Pinwheel and Gaussian Mixtures), whereas GANs perform better on datasets characterized by sharper transitions (Spiral and Checkerboard).
+
+\section{Training}
+Both models were trained using PyTorch with dataset-specific hyperparameters described later. Training used the Adam optimizer with a learning rate of $10^{-3}$. For each dataset, 500 samples were held out for loss evaluation only.
+
+For the GAN, the generator sampled latent vectors from a standard normal distribution and was updated using Binary Cross-Entropy (BCE) loss, with target labels of 1 to encourage generated outputs to be classified as real. The discriminator was trained on real and generated samples using BCE losses with targets 1 and 0, respectively. Generator, discriminator, and hold-out losses were logged separately.
+
+For the VAE, each input was encoded into posterior parameters $\mu$ and $\log \sigma^2$, and latent vectors were sampled via the reparameterization trick. The loss consisted of a mean-squared-error reconstruction term and a KL divergence term weighted by $\beta = 0.2$. Reconstruction, KL, total loss, and hold-out loss were recorded for all epochs.
+
+Training and hold-out losses were computed at every epoch. Convergence was monitored using loss curves, sample visualizations, and KDE heatmaps. All experiments used fixed random seeds, and 2000 samples were generated for evaluation and visualization after training.
+
+\subsection{Overtraining Considerations}
+No significant overtraining was observed. Hold-out losses closely matched training losses for both models, likely due to the simplicity of the 2-D distributions, which lack fine-grained irregularities or noise patterns that typically encourage overfitting. The relatively compact network architectures also limited the risk of memorization. Although GANs can experience mode collapse or discriminator overpowering, these issues manifested primarily in sample distributions rather than loss divergence. Overall, training remained stable with minimal indications of overfitting.
+
+\section{Qualitative Comparison}
+
+\subsection{Pinwheel Dataset}
+GAN samples capture spiral arms with high fidelity and preserve local structures, whereas VAE samples are smoother and exhibit some blurring of boundaries. The GAN samples fail to capture the shape of one of the arms of the spiral but offer a tighter grouping. The VAE samples in comparison are more accurate in capturing the overall shape but add noisy samples between each arm (Figure~\ref{fig:kde_pinwheel}).
+
+\subsection{Spiral Dataset}
+VAE samples closely follow the continuous spiral curves of the true data manifold, whereas GAN samples occasionally fail to cover portions of the spiral, resulting in uneven representation. The GAN samples fail to capture the tail end of the spiral but offer a tighter grouping. The VAE samples in comparison are more accurate in capturing the overall shape but add noisy samples all throughout (Figure~\ref{fig:kde_spiral}).
+
+\subsection{Checkerboard Dataset}
+GAN samples clearly delineate high- and low-density regions, effectively reproducing sharp edges between squares, whereas VAE samples exhibit smoother transitions and slightly blurred boundaries. The GAN samples are still not able to completely recreate the sharp edges but they are far less noisy than the VAE samples. (Figure~\ref{fig:kde_checkerboard}).
+
+\subsection{Gaussian Mixtures Dataset}
+VAE samples form smooth clusters that cover all modes, whereas GAN samples tend to over represent high-density peaks. The VAE samples have more noise between nodes where as the GAN samples are not as noisy (Figure~\ref{fig:kde_gaussian}).
+
+\section{Quantitative Comparison}
+KDE log-likelihood results are presented in Table~\ref{tab:kde_results}. VAEs demonstrate superior performance on Pinwheel \& Gaussian Mixtures datasets, whereas GANs more effectively capture the Spiral \& Checkerboard datasets.
+
+\begin{table}[H]
+\centering
+\caption{KDE log-likelihood (higher is better) for VAE and GAN samples on each dataset.}
+\label{tab:kde_results}
+\begin{tabular}{lcc}
+\toprule
+Dataset & VAE & GAN \\
+\midrule
+Pinwheel & -0.6934 & -0.7832 \\
+Spiral & -0.7580 & -0.7381 \\
+Checkerboard & -4.1033 & -4.0468 \\
+Gaussian Mixtures & -1.4580 & -1.4987 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+
+VAEs and GANs were evaluated across four 2-D synthetic datasets and showed complementary strengths. VAEs provided smoother, more complete coverage of the data manifolds, while GANs produced sharper samples and captured datasets with discrete structure more effectively. Both models trained stably, with hold-out losses closely matching training losses.
+
+\section{Model Architectures}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{model_info/vae_summary_20251204_220244.png}
+        \caption{VAE Architecture}
+        \label{fig:vae_arch}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{model_info/gan_summary_20251204_220429.png}
+        \caption{GAN Architecture}
+        \label{fig:gan_arch}
+    \end{subfigure}
+    \caption{Summary of VAE and GAN architectures.}
+    \label{fig:model_architectures}
+\end{figure}
+
+\section{Pinwheel Dataset}
+\subsection{Training Setup}
+\textbf{VAE:} hidden dim $h=128$, latent dim $z=24$, residual blocks $n_{res}=3$, $\beta=0.2$, learning rate $10^{-3}$, batch size 128, epochs 800.\\
+\textbf{GAN:} Generator hidden dim $h_G=32$, Discriminator hidden dim $h_D=42$, Generator residual blocks $n_{res}^G=2$, Discriminator residual blocks $n_{res}^D=4$, learning rate $10^{-3}$, betas $(0.5,0.9)$, batch size 128, epochs 800.
+
+\subsection{Results}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_loss_curves_20251205_222457.png}
+        \caption{VAE Loss}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_loss_curves_20251205_222534.png}
+        \caption{GAN Loss}
+    \end{subfigure}
+    \caption{Training loss curves for VAE and GAN on the Pinwheel dataset.}
+    \label{fig:loss_pinwheel}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_scatter_samples_20251205_222457.png}
+        \caption{VAE Samples}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_scatter_samples_20251205_222534.png}
+        \caption{GAN Samples}
+    \end{subfigure}
+    \caption{Generated samples on the Pinwheel dataset.}
+    \label{fig:samples_pinwheel}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_kde_density_20251205_222457.png}
+        \caption{VAE KDE}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_kde_density_20251205_222534.png}
+        \caption{GAN KDE}
+    \end{subfigure}
+    \caption{KDE visualizations of generated samples on the Pinwheel dataset.}
+    \label{fig:kde_pinwheel}
+\end{figure}
+
+\section{Spiral Dataset}
+\subsection{Training Setup}
+\textbf{VAE:} hidden dim $h=128$, latent dim $z=24$, residual blocks $n_{res}=3$, $\beta=0.2$, learning rate $10^{-3}$, batch size 128, epochs 1500.\\
+\textbf{GAN:} Generator hidden dim $h_G=32$, Discriminator hidden dim $h_D=42$, Generator residual blocks $n_{res}^G=2$, Discriminator residual blocks $n_{res}^D=4$, learning rate $10^{-3}$, betas $(0.5,0.9)$, batch size 128, epochs 1200.
+
+\subsection{Results}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_loss_curves_20251205_222709.png}
+        \caption{VAE Loss}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_loss_curves_20251205_222804.png}
+        \caption{GAN Loss}
+    \end{subfigure}
+    \caption{Training loss curves for VAE and GAN on the Spiral dataset.}
+    \label{fig:loss_spiral}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_scatter_samples_20251205_222709.png}
+        \caption{VAE Samples}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_scatter_samples_20251205_222804.png}
+        \caption{GAN Samples}
+    \end{subfigure}
+    \caption{Generated samples on the Spiral dataset.}
+    \label{fig:samples_spiral}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_kde_density_20251205_222709.png}
+        \caption{VAE KDE}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_kde_density_20251205_222804.png}
+        \caption{GAN KDE}
+    \end{subfigure}
+    \caption{KDE visualizations of generated samples on the Spiral dataset.}
+    \label{fig:kde_spiral}
+\end{figure}
+
+\section{Checkerboard Dataset}
+\subsection{Training Setup}
+\textbf{VAE:} hidden dim $h=128$, latent dim $z=24$, residual blocks $n_{res}=3$, $\beta=0.2$, learning rate $10^{-3}$, batch size 128, epochs 1000.\\
+\textbf{GAN:} Generator hidden dim $h_G=32$, Discriminator hidden dim $h_D=42$, Generator residual blocks $n_{res}^G=2$, Discriminator residual blocks $n_{res}^D=4$, learning rate $10^{-3}$, betas $(0.5,0.9)$, batch size 128, epochs 650.
+
+\subsection{Results}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_loss_curves_20251205_222911.png}
+        \caption{VAE Loss}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_loss_curves_20251205_222942.png}
+        \caption{GAN Loss}
+    \end{subfigure}
+    \caption{Training loss curves for VAE and GAN on the Checkerboard dataset.}
+    \label{fig:loss_checkerboard}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_scatter_samples_20251205_222911.png}
+        \caption{VAE Samples}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_scatter_samples_20251205_222942.png}
+        \caption{GAN Samples}
+    \end{subfigure}
+    \caption{Generated samples on the Checkerboard dataset.}
+    \label{fig:samples_checkerboard}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_kde_density_20251205_222911.png}
+        \caption{VAE KDE}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_kde_density_20251205_222942.png}
+        \caption{GAN KDE}
+    \end{subfigure}
+    \caption{KDE visualizations of generated samples on the Checkerboard dataset.}
+    \label{fig:kde_checkerboard}
+\end{figure}
+
+\section{Gaussian Mixtures Dataset}
+\subsection{Training Setup}
+\textbf{VAE:} hidden dim $h=128$, latent dim $z=24$, residual blocks $n_{res}=3$, $\beta=0.2$, learning rate $10^{-3}$, batch size 128, epochs 800.\\
+\textbf{GAN:} Generator hidden dim $h_G=32$, Discriminator hidden dim $h_D=42$, Generator residual blocks $n_{res}^G=2$, Discriminator residual blocks $n_{res}^D=4$, learning rate $10^{-3}$, betas $(0.5,0.9)$, batch size 128, epochs 400.
+
+\subsection{Results}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_loss_curves_20251205_223043.png}
+        \caption{VAE Loss}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_loss_curves_20251205_223101.png}
+        \caption{GAN Loss}
+    \end{subfigure}
+    \caption{Training loss curves for VAE and GAN on the Gaussian Mixtures dataset.}
+    \label{fig:loss_gaussian}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_scatter_samples_20251205_223043.png}
+        \caption{VAE Samples}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_scatter_samples_20251205_223101.png}
+        \caption{GAN Samples}
+    \end{subfigure}
+    \caption{Generated samples on the Gaussian Mixtures dataset.}
+    \label{fig:samples_gaussian}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/vae_kde_density_20251205_223043.png}
+        \caption{VAE KDE}
+    \end{subfigure}
+    \begin{subfigure}{0.48\linewidth}
+        \includegraphics[width=\linewidth]{results/gan_kde_density_20251205_223101.png}
+        \caption{GAN KDE}
+    \end{subfigure}
+    \caption{KDE visualizations of generated samples on the Gaussian Mixtures dataset.}
+    \label{fig:kde_gaussian}
+\end{figure}
+
+\end{document}
